@@ -79,7 +79,7 @@ if st.button("Generar Informe 🚀", type="primary"):
             with st.spinner('La IA está redactando el informe...'):
                 wait_for_files_active(gemini_files)
                 model = genai.GenerativeModel(
-                    model_name="gemini-1.5-pro", 
+                    model_name="gemini-1.5-flash", 
                     system_instruction=SYSTEM_INSTRUCTION,
                     tools='code_execution'
                 )
@@ -102,4 +102,5 @@ if st.button("Generar Informe 🚀", type="primary"):
                 st.download_button("📥 Descargar WORD", data=bio.getvalue(), file_name="Informe_Legal.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
         except Exception as e:
+
             st.error(f"Error: {e}")
