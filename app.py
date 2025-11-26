@@ -14,6 +14,15 @@ try:
     # Intenta coger la clave de los secretos de la nube
     api_key = st.secrets["GOOGLE_API_KEY"]
     genai.configure(api_key=api_key)
+    # --- CÓDIGO TEMPORAL DE DIAGNÓSTICO ---
+st.subheader("⚠️ LISTA DE MODELOS DISPONIBLES:")
+try:
+    for m in genai.list_models():
+        if 'generateContent' in m.supported_generation_methods:
+            st.code(m.name)
+except Exception as e:
+    st.error(f"Error listando modelos: {e}")
+# ---------------------------------------
 except:
     st.error("⚠️ No se ha detectado la API Key. Configúrala en los 'Secrets' de Streamlit.")
     st.stop()
@@ -104,5 +113,6 @@ if st.button("Generar Informe 🚀", type="primary"):
         except Exception as e:
 
             st.error(f"Error: {e}")
+
 
 
