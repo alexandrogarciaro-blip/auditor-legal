@@ -97,7 +97,7 @@ if st.button("🔍 INICIAR AUDITORÍA", type="primary"):
                     
                     # CONFIGURACIÓN DEL MODELO GEMINI 3
                     model = genai.GenerativeModel(
-                        model_name="gemini-2.0-flash", ######################################################################################## VERSION DE GEMINI
+                        model_name="gemini-2.5-flash", ######################################################################################## VERSION DE GEMINI
                         system_instruction=SYSTEM_PROMPT,
                         tools='code_execution'
                     )
@@ -140,5 +140,6 @@ if st.button("🔍 INICIAR AUDITORÍA", type="primary"):
 
         except Exception as e:
             st.error(f"Ocurrió un error: {e}")
+
 
 
