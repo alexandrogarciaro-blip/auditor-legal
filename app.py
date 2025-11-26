@@ -79,7 +79,7 @@ if st.button("Generar Informe 🚀", type="primary"):
             with st.spinner('La IA está redactando el informe...'):
                 wait_for_files_active(gemini_files)
                 model = genai.GenerativeModel(
-                    model_name="gemini-1.5-flash-001", 
+                    model_name="gemini-1.5-pro-latest", 
                     system_instruction=SYSTEM_INSTRUCTION,
                     tools='code_execution'
                 )
@@ -104,4 +104,5 @@ if st.button("Generar Informe 🚀", type="primary"):
         except Exception as e:
 
             st.error(f"Error: {e}")
+
 
