@@ -25,7 +25,7 @@ except:
     st.stop()
 
 # --- TÍTULO ---
-st.title("⚖️ Auditoría de Escrituras (Gemini 3 Pro)")
+st.title("⚖️ Auditoría de Escrituras (PALOMARES CONSULTORES)")
 st.markdown("---")
 st.info("ℹ️ Sube todas las escrituras (PDF). La IA ordenará los hechos y calculará el reparto de socios.")
 
@@ -140,6 +140,7 @@ if st.button("🔍 INICIAR AUDITORÍA", type="primary"):
 
         except Exception as e:
             st.error(f"Ocurrió un error: {e}")
+
 
 
 
