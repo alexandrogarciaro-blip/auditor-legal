@@ -81,8 +81,18 @@ def add_markdown_to_doc(doc, text):
                                 cell = t.cell(r, c)
                                 p = cell.paragraphs[0]
                                 p.text = cell_text
-                                if r == 0: 
+                                
+                                # NEGRITA PARA ENCABEZADO (Fila 0) Y TOTALES
+                                is_header = (r == 0)
+                                is_total = (c == 0 and "TOTAL" in cell_text.upper())
+                                
+                                if is_header or is_total: 
                                     for run in p.runs: run.bold = True
+                                    
+                                # Si es la fila de TOTAL, ponemos negrita a todas las celdas de esa fila
+                                if "TOTAL" in row_data[0].upper():
+                                     for run in p.runs: run.bold = True
+
                 table_buffer = []
                 in_table = False
 
@@ -106,7 +116,6 @@ def create_professional_report(content_text):
     doc = Document()
     for _ in range(5): doc.add_paragraph()
     
-    # Título Portada Word
     title = doc.add_heading('INFORME DE SITUACIÓN SOCIETARIA', 0)
     title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
     doc.add_paragraph(f'Fecha: {datetime.now().strftime("%d/%m/%Y")}').alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
@@ -125,15 +134,12 @@ with st.sidebar:
     uploaded_files = st.file_uploader("1. Sube Escrituras (PDF)", type=['pdf'], accept_multiple_files=True)
     st.markdown("---")
     analyze_btn = st.button("2. EJECUTAR ANÁLISIS ✨", type="primary")
-    
-    # [RECUPERADO] El consejo informativo del final
     st.markdown("---")
     st.info("💡 **Consejo:** Sube todos los documentos de una misma empresa juntos para que la IA pueda trazar la historia completa.")
 
 # --- 5. INTERFAZ (PRINCIPAL) ---
 st.title("⚖️ Auditoría Legal Inteligente")
 
-# [RECUPERADO] El cuadro de bienvenida grande
 if not uploaded_files:
     st.markdown("""
     <div style="padding: 20px; background-color: #e8f4f8; border-radius: 10px; border: 1px solid #d1e7dd;">
@@ -141,7 +147,7 @@ if not uploaded_files:
         <p style="color: #0c5460;">Esta herramienta utiliza inteligencia artificial avanzada para analizar escrituras notariales.</p>
         <p><b>Instrucciones de uso:</b></p>
         <ol style="color: #0c5460;">
-            <li>Sube los PDFs en el menú de la izquierda (Constitución, Ampliaciones, etc.).</li>
+            <li>Sube los PDFs en el menú de la izquierda.</li>
             <li>Haz clic en <b>EJECUTAR ANÁLISIS</b>.</li>
             <li>La IA ordenará los hechos y calculará el reparto de capital.</li>
             <li>Podrás descargar el resultado en Word.</li>
@@ -167,24 +173,31 @@ if analyze_btn and uploaded_files:
             progress.progress(0.6, text="Analizando...")
             time.sleep(1)
             
-            # PROMPT MAESTRO
+            # --- PROMPT V5.2 (CON TOTALES OBLIGATORIOS) ---
             SYSTEM_PROMPT = """
             ROL: Abogado Mercantilista y Auditor.
-            OBJETIVO: Redactar un Informe de Situación.
+            OBJETIVO: Redactar un Informe de Situación Societaria.
             
-            INSTRUCCIONES DE CABECERA:
-            1. NO pongas "Due Diligence".
-            2. Empieza el informe con: "# INFORME DE SITUACIÓN ACTUAL".
+            INSTRUCCIONES DE FORMATO OBLIGATORIAS:
+            1. Título inicial: "# INFORME DE SITUACIÓN ACTUAL".
+            2. NO muestres código Python. Dame solo texto limpio.
             
-            INSTRUCCIONES TÉCNICAS:
-            1. Usa 'code_execution' para calcular el Cap Table exacto.
-            2. IMPORTANTE: Tras calcular con Python, PINTA LA TABLA DE NUEVO en el texto final (Markdown).
-            3. No muestres código Python ni variables, solo el texto narrativo y las tablas.
+            REGLA DE ORO PARA TABLAS (INMUTABLE):
+            Debes generar la tabla con EXACTAMENTE estas columnas y UNA FILA FINAL DE TOTALES:
             
-            ESTRUCTURA:
+            | Socios | Participaciones | Capital Nominal | Porcentaje % |
+            |---|---|---|---|
+            | [Datos...] | [Datos...] | [Datos...] | [Datos...] |
+            | **TOTAL** | **[Suma Total]** | **[Suma Total]** | **100%** |
+            
+            Notas sobre la tabla:
+            - La última fila debe llamarse "TOTAL" y debe sumar todas las columnas numéricas.
+            - Indica la moneda (ej: 3.000 €).
+            
+            ESTRUCTURA DEL INFORME:
             1. Resumen Ejecutivo.
             2. Cronología Detallada.
-            3. Tabla de Titularidad Actual (Pintada explícitamente).
+            3. Tabla de Titularidad Actual (Con Totales).
             4. Incidencias.
             """
 
@@ -195,7 +208,6 @@ if analyze_btn and uploaded_files:
             )
             response = model.generate_content(["Genera el informe.", *gemini_files])
             
-            # Limpieza
             final_text = clean_technical_output(response.text)
             
             progress.empty()
