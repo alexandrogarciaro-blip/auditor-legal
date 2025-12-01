@@ -39,14 +39,12 @@ except:
     st.error("⚠️ Error: No API Key found.")
     st.stop()
 
-# --- 3. FUNCIONES DE LIMPIEZA ---
+# --- 3. FUNCIONES ---
 def clean_technical_output(text):
-    """
-    Elimina CUALQUIER bloque de código (entre tres comillas simples), 
-    sea python, json o texto plano.
-    """
-    # Esta expresión regular busca cualquier cosa entre ``` y ``` y la elimina
+    # Borra cualquier bloque de código
     text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
+    # Borra posibles títulos residuales si la IA es rebelde
+    text = text.replace("# INFORME DE DUE DILIGENCE", "# INFORME DE SITUACIÓN")
     return text.strip()
 
 def add_markdown_to_doc(doc, text):
@@ -100,7 +98,10 @@ def add_markdown_to_doc(doc, text):
 def create_professional_report(content_text):
     doc = Document()
     for _ in range(5): doc.add_paragraph()
-    title = doc.add_heading('INFORME DE LAS ESCRITURAS', 0)
+    
+    # --- AQUÍ CAMBIAMOS EL TÍTULO DE LA PORTADA DEL WORD ---
+    title = doc.add_heading('INFORME DE SITUACIÓN SOCIETARIA', 0)
+    
     title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
     doc.add_paragraph(f'Fecha: {datetime.now().strftime("%d/%m/%Y")}').alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
     doc.add_page_break()
@@ -138,24 +139,25 @@ if analyze_btn and uploaded_files:
             progress.progress(0.6, text="Analizando...")
             time.sleep(1)
             
-            # --- PROMPT REFORZADO ---
+            # --- PROMPT CON INSTRUCCIÓN DE TÍTULO OBLIGATORIO ---
             SYSTEM_PROMPT = """
-            ROL: Abogado Mercantilista.
-            OBJETIVO: Informe de Due Diligence.
+            ROL: Abogado Mercantilista y Auditor.
+            OBJETIVO: Redactar un Informe de Situación.
             
-            INSTRUCCIÓN TÉCNICA (OBLIGATORIA):
-            1. Usa el entorno de ejecución (Code Execution) para hacer los cálculos matemáticos.
-            2. **IMPORTANTE:** El usuario NO puede ver el código. Tu respuesta final debe ser TEXTO PLANO y TABLAS MARKDOWN ESTÁNDAR.
-            3. **PROHIBIDO:** No pongas la tabla final dentro de un bloque de código. Escríbela fuera.
+            INSTRUCCIONES DE CABECERA (IMPORTANTE):
+            1. NO pongas "Due Diligence".
+            2. Empieza el informe con el título exacto: "# INFORME DE SITUACIÓN ACTUAL".
             
-            FORMATO ESPERADO:
-            [Texto de la historia...]
+            INSTRUCCIONES TÉCNICAS:
+            1. Usa 'code_execution' para calcular el Cap Table exacto.
+            2. IMPORTANTE: Una vez calculada la tabla con Python, PÍNTALA DE NUEVO como una tabla Markdown normal en el texto final.
+            3. No muestres código Python, solo texto y tablas legibles.
             
-            | Socio | % |
-            |---|---|
-            | A | 50% |
-            
-            [Más texto...]
+            ESTRUCTURA:
+            1. Resumen Ejecutivo.
+            2. Cronología Detallada.
+            3. Tabla de Titularidad Actual (Pintada explícitamente).
+            4. Incidencias.
             """
 
             model = genai.GenerativeModel(
@@ -165,7 +167,7 @@ if analyze_btn and uploaded_files:
             )
             response = model.generate_content(["Genera el informe.", *gemini_files])
             
-            # LIMPIEZA AGRESIVA (Ahora borra cualquier bloque ``` ... ```)
+            # Limpieza y Sustitución de seguridad (si se le escapa el título viejo, lo cambiamos por software)
             final_text = clean_technical_output(response.text)
             
             progress.empty()
