@@ -39,25 +39,58 @@ except:
     st.error("⚠️ Error: No API Key found.")
     st.stop()
 
-# --- 3. FUNCIONES DE LIMPIEZA INTELIGENTE (TÉCNICA DEL MARCADOR) ---
+# --- 3. FUNCIONES DE LIMPIEZA AVANZADA (EL COLADOR) ---
 
 def clean_technical_output(text):
     """
-    Estrategia V6.0: Busca el marcador '### INICIO DEL INFORME'.
-    Todo lo que esté antes de eso (código, variables, pensamientos) SE BORRA.
+    V7.0: Filtro quirúrgico línea por línea.
+    Elimina rastros de Python pero mantiene intactas las tablas y el texto.
     """
-    marker = "### INICIO DEL INFORME"
+    # 1. Eliminar bloques de código explícitos
+    text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
     
-    if marker in text:
-        # Dividimos el texto en dos partes y nos quedamos solo con la segunda
-        clean_text = text.split(marker)[1]
-    else:
-        # Plan B: Si la IA olvidó el marcador, intentamos limpiar a mano
-        clean_text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
+    # 2. Corregir títulos
+    text = text.replace("# INFORME DE DUE DILIGENCE", "# INFORME DE SITUACIÓN")
     
-    # Limpieza final de espacios y títulos rebeldes
-    clean_text = clean_text.replace("# INFORME DE DUE DILIGENCE", "# INFORME DE SITUACIÓN")
-    return clean_text.strip()
+    lines = text.split('\n')
+    clean_lines = []
+    
+    for line in lines:
+        l = line.strip()
+        
+        # --- REGLA DE ORO: SI ES TABLA LIMPIA, SE QUEDA ---
+        if l.startswith("|") and not "print(" in l:
+            clean_lines.append(line)
+            continue
+            
+        # --- REGLA DE ORO 2: SI ES TÍTULO MARKDOWN, SE QUEDA ---
+        if l.startswith("#"):
+            clean_lines.append(line)
+            continue
+
+        # --- DETECTOR DE BASURA PYTHON ---
+        is_garbage = False
+        
+        # Detectar comandos de impresión de código
+        if l.startswith('print(f"|') or l.startswith("print('"): is_garbage = True
+        if l.startswith('print("'): is_garbage = True
+        
+        # Detectar asignación de variables matemáticas
+        if " = " in l and not "Socio" in l: # Evita borrar texto narrativo
+             # Si tiene operaciones matemáticas o corchetes, es código
+             if "+" in l or "*" in l or "/" in l or "{" in l or "[" in l:
+                 is_garbage = True
+        
+        # Detectar comentarios de código (empiezan por # pero no son títulos ##)
+        if l.startswith("#") and not l.startswith("##"): is_garbage = True
+        
+        if l.startswith("def ") or l.startswith("import "): is_garbage = True
+        if l == "python": is_garbage = True
+        
+        if not is_garbage:
+            clean_lines.append(line)
+            
+    return '\n'.join(clean_lines).strip()
 
 def add_markdown_to_doc(doc, text):
     lines = text.split('\n')
@@ -67,6 +100,7 @@ def add_markdown_to_doc(doc, text):
         stripped = line.strip()
         if not stripped: continue
         
+        # Detector de tablas
         if stripped.startswith('|') and stripped.endswith('|'):
             if '---' in stripped: continue
             row_data = [c.strip() for c in stripped.split('|') if c.strip()]
@@ -86,6 +120,7 @@ def add_markdown_to_doc(doc, text):
                                 cell = t.cell(r, c)
                                 p = cell.paragraphs[0]
                                 p.text = cell_text
+                                # Negritas inteligentes
                                 is_header = (r == 0)
                                 is_total = (c == 0 and "TOTAL" in cell_text.upper())
                                 if is_header or is_total: 
@@ -95,6 +130,7 @@ def add_markdown_to_doc(doc, text):
                 table_buffer = []
                 in_table = False
 
+            # Formato texto
             if stripped.startswith('## '):
                 doc.add_heading(stripped.replace('#', '').strip(), level=1)
             elif stripped.startswith('### '):
@@ -141,13 +177,10 @@ if not uploaded_files:
     st.markdown("""
     <div style="padding: 20px; background-color: #e8f4f8; border-radius: 10px; border: 1px solid #d1e7dd;">
         <h4 style="color: #0c5460;">👋 Bienvenido al Sistema de Auditoría</h4>
-        <p style="color: #0c5460;">Herramienta avanzada para analizar escrituras notariales.</p>
-        <p><b>Instrucciones:</b></p>
         <ol style="color: #0c5460;">
-            <li>Sube los PDFs en el menú de la izquierda.</li>
+            <li>Sube los PDFs.</li>
             <li>Haz clic en <b>EJECUTAR ANÁLISIS</b>.</li>
-            <li>La IA ordenará los hechos y calculará el reparto de capital.</li>
-            <li>Podrás descargar el resultado en Word.</li>
+            <li>Descarga el Word.</li>
         </ol>
     </div>
     """, unsafe_allow_html=True)
@@ -170,38 +203,31 @@ if analyze_btn and uploaded_files:
             progress.progress(0.6, text="Analizando...")
             time.sleep(1)
             
-            # --- PROMPT V6.0 (MARCADOR DE CORTE) ---
+            # --- PROMPT V7.0 (SOLICITUD DE TEXTO PLANO) ---
             SYSTEM_PROMPT = """
             ROL: Abogado Mercantilista y Auditor.
-            OBJETIVO: Redactar un Informe de Situación Societaria.
+            OBJETIVO: Redactar un Informe de Situación.
             
-            INSTRUCCIONES DE PROCESAMIENTO (INTERNO):
-            1. Usa Python libremente para calcular los datos.
-            2. Cuando termines los cálculos, PREPARA EL INFORME FINAL PARA EL CLIENTE.
+            INSTRUCCIÓN TÉCNICA (OBLIGATORIA):
+            1. Usa 'code_execution' para calcular internamente.
+            2. **PROHIBIDO:** No uses la función 'print()' de Python para pintar la tabla final.
+            3. **OBLIGATORIO:** Cierra el bloque de código y escribe la tabla manualmente en formato Markdown fuera de Python.
             
-            INSTRUCCIONES DE SALIDA (LO QUE VE EL CLIENTE):
-            1. Antes de escribir el título del informe, escribe OBLIGATORIAMENTE esta línea exacta:
-               ### INICIO DEL INFORME
-            2. Todo lo que escribas DESPUÉS de esa línea será el informe final.
-            3. NO incluyas código ni explicaciones técnicas después de esa línea.
-            
-            FORMATO DEL INFORME FINAL (DESPUÉS DEL MARCADOR):
-            # INFORME DE SITUACIÓN ACTUAL
-            
-            1. Resumen Ejecutivo.
-            2. Cronología Detallada.
-            
-            3. Tabla de Titularidad Actual (OBLIGATORIA):
+            FORMATO TABLA (OBLIGATORIO):
             | Socios | Participaciones | Capital Nominal | Porcentaje % |
             |---|---|---|---|
-            | [Datos...] | [Datos...] | [Datos...] | [Datos...] |
+            | [Datos] | [Datos] | [Datos] | [Datos] |
             | **TOTAL** | **[Suma]** | **[Suma]** | **100%** |
             
+            ESTRUCTURA DEL INFORME:
+            1. Resumen Ejecutivo.
+            2. Cronología Detallada.
+            3. Tabla de Titularidad Actual.
             4. Incidencias.
             """
 
-            # Temperatura baja
-            generation_config = {"temperature": 0.1}
+            # Temperatura moderada para que no se bloquee en bucles de código
+            generation_config = {"temperature": 0.2}
 
             model = genai.GenerativeModel(
                 model_name="gemini-2.5-flash",
@@ -211,8 +237,7 @@ if analyze_btn and uploaded_files:
             )
             response = model.generate_content(["Genera el informe.", *gemini_files])
             
-            # --- LIMPIEZA POR CORTE ---
-            # El sistema buscará "### INICIO DEL INFORME" y borrará todo lo anterior
+            # APLICAMOS EL FILTRO QUIRÚRGICO
             final_text = clean_technical_output(response.text)
             
             progress.empty()
@@ -230,5 +255,6 @@ if analyze_btn and uploaded_files:
             bio = io.BytesIO()
             doc.save(bio)
             st.download_button("📥 Descargar Word", data=bio.getvalue(), file_name="Auditoria.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
 
 
