@@ -14,28 +14,19 @@ st.set_page_config(page_title="LegalAudit AI", page_icon="⚖️", layout="wide"
 
 st.markdown("""
     <style>
-    /* BARRA LATERAL OSCURA */
     section[data-testid="stSidebar"] {background-color: #101820;}
     section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2,
     section[data-testid="stSidebar"] label, section[data-testid="stSidebar"] .stMarkdown,
     section[data-testid="stSidebar"] p {color: #ffffff !important;}
-    
-    /* FONDO PRINCIPAL */
     .main {background-color: #f4f6f9;}
     h1 {color: #2c3e50; font-family: 'Helvetica', sans-serif;}
-    
-    /* BOTONES DORADOS */
     .stButton>button {width: 100%; border-radius: 8px; height: 3em; background-color: #c5a059; color: white; font-weight: bold; border: none;}
     .stButton>button:hover {background-color: #b08d4b; color: white;}
-    
-    /* VISIBILIDAD DE ARCHIVOS EN BARRA LATERAL */
     [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] div,
     [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] small,
     [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] span {color: #ffffff !important;}
     [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] svg {fill: #ffffff !important;}
     [data-testid="stSidebar"] button[kind="secondary"] {background-color: #ffffff !important; color: #000000 !important; border: none;}
-    
-    /* CAJA DE ÉXITO */
     .success-box {padding: 1rem; background-color: #d4edda; border-left: 6px solid #28a745; color: #155724; margin-bottom: 1rem;}
     </style>
     """, unsafe_allow_html=True)
@@ -48,25 +39,38 @@ except:
     st.error("⚠️ Error: No API Key found.")
     st.stop()
 
-# --- 3. FUNCIONES ---
+# --- 3. FUNCIONES DE LIMPIEZA INTELIGENTE ---
 
 def clean_technical_output(text):
     """
-    CORRECCIÓN CRÍTICA:
-    Solo borra bloques de código Python.
-    Si la tabla está dentro de un bloque markdown, la PRESERVA.
+    Filtro avanzado: Elimina bloques de código y líneas sueltas de programación Python.
     """
-    # 1. Borrar bloques estrictamente de Python (cálculos)
-    text = re.sub(r'```python.*?```', '', text, flags=re.DOTALL)
+    # 1. Borrar bloques completos entre ``` y ```
+    text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
     
-    # 2. Borrar títulos viejos si aparecen
+    # 2. Borrar títulos viejos
     text = text.replace("# INFORME DE DUE DILIGENCE", "# INFORME DE SITUACIÓN")
     
-    # 3. Limpieza suave: Si quedan comillas triples ``` o ```markdown, las quitamos
-    # pero NO borramos lo que hay dentro (porque ahí está la tabla).
-    text = text.replace('```markdown', '').replace('```', '')
+    # 3. FILTRO LÍNEA A LÍNEA (El "Escoba")
+    # Si una línea parece código Python, la eliminamos.
+    lines = text.split('\n')
+    clean_lines = []
     
-    return text.strip()
+    for line in lines:
+        l = line.strip()
+        
+        # Patrones de código que NO queremos ver
+        is_code = False
+        if l.startswith("print(") or l.startswith("def "): is_code = True
+        if "socios_data =" in l or "total_participaciones =" in l: is_code = True
+        if l.startswith("python") and len(l) < 10: is_code = True # La palabra "python" suelta
+        if l.startswith("table_rows"): is_code = True
+        if "append(f" in l: is_code = True
+        
+        if not is_code:
+            clean_lines.append(line)
+            
+    return '\n'.join(clean_lines).strip()
 
 def add_markdown_to_doc(doc, text):
     lines = text.split('\n')
@@ -76,7 +80,6 @@ def add_markdown_to_doc(doc, text):
         stripped = line.strip()
         if not stripped: continue
         
-        # Detector de tablas mejorado
         if stripped.startswith('|') and stripped.endswith('|'):
             if '---' in stripped: continue
             row_data = [c.strip() for c in stripped.split('|') if c.strip()]
@@ -96,16 +99,12 @@ def add_markdown_to_doc(doc, text):
                                 cell = t.cell(r, c)
                                 p = cell.paragraphs[0]
                                 p.text = cell_text
-                                
-                                # NEGRITA PARA ENCABEZADO Y TOTALES
                                 is_header = (r == 0)
                                 is_total = (c == 0 and "TOTAL" in cell_text.upper())
-                                
                                 if is_header or is_total: 
                                     for run in p.runs: run.bold = True
                                 if "TOTAL" in row_data[0].upper():
                                      for run in p.runs: run.bold = True
-
                 table_buffer = []
                 in_table = False
 
@@ -128,7 +127,6 @@ def add_markdown_to_doc(doc, text):
 def create_professional_report(content_text):
     doc = Document()
     for _ in range(5): doc.add_paragraph()
-    
     title = doc.add_heading('INFORME DE SITUACIÓN SOCIETARIA', 0)
     title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
     doc.add_paragraph(f'Fecha: {datetime.now().strftime("%d/%m/%Y")}').alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
@@ -136,13 +134,12 @@ def create_professional_report(content_text):
     add_markdown_to_doc(doc, content_text)
     return doc
 
-# --- 4. INTERFAZ (BARRA LATERAL) ---
+# --- 4. INTERFAZ ---
 with st.sidebar:
     try:
         st.image("logo.png", width=280)
     except:
         st.image("https://cdn-icons-png.flaticon.com/512/1998/1998342.png", width=100)
-    
     st.markdown("### Panel de Control")
     uploaded_files = st.file_uploader("1. Sube Escrituras (PDF)", type=['pdf'], accept_multiple_files=True)
     st.markdown("---")
@@ -157,8 +154,8 @@ if not uploaded_files:
     st.markdown("""
     <div style="padding: 20px; background-color: #e8f4f8; border-radius: 10px; border: 1px solid #d1e7dd;">
         <h4 style="color: #0c5460;">👋 Bienvenido al Sistema de Auditoría</h4>
-        <p style="color: #0c5460;">Esta herramienta utiliza inteligencia artificial avanzada para analizar escrituras notariales.</p>
-        <p><b>Instrucciones de uso:</b></p>
+        <p style="color: #0c5460;">Herramienta avanzada para analizar escrituras notariales.</p>
+        <p><b>Instrucciones:</b></p>
         <ol style="color: #0c5460;">
             <li>Sube los PDFs en el menú de la izquierda.</li>
             <li>Haz clic en <b>EJECUTAR ANÁLISIS</b>.</li>
@@ -186,31 +183,33 @@ if analyze_btn and uploaded_files:
             progress.progress(0.6, text="Analizando...")
             time.sleep(1)
             
-            # --- PROMPT V5.4 (CON CONTROL DE TABLAS) ---
+            # --- PROMPT V5.5 (ANTIRUIDO) ---
             SYSTEM_PROMPT = """
             ROL: Abogado Mercantilista y Auditor.
             OBJETIVO: Redactar un Informe de Situación Societaria.
             
-            INSTRUCCIONES DE FORMATO:
-            1. Título: "# INFORME DE SITUACIÓN ACTUAL".
-            2. Usa 'code_execution' para los cálculos, pero NO muestres el código.
-            3. **IMPORTANTE:** La tabla final DEBE aparecer en el texto.
+            INSTRUCCIONES DE SALIDA (MUY IMPORTANTE):
+            1. NO EXPLIQUES LOS CÁLCULOS.
+            2. NO MUESTRES VARIABLES DE PYTHON.
+            3. DAME DIRECTAMENTE EL TEXTO FINAL Y LA TABLA.
             
-            PLANTILLA DE TABLA OBLIGATORIA:
+            REGLA DE ORO PARA TABLAS (INMUTABLE):
+            Debes generar la tabla con EXACTAMENTE estas columnas y UNA FILA FINAL DE TOTALES:
+            
             | Socios | Participaciones | Capital Nominal | Porcentaje % |
             |---|---|---|---|
-            | ... | ... | ... | ... |
-            | **TOTAL** | **...** | **...** | **100%** |
+            | [Datos...] | [Datos...] | [Datos...] | [Datos...] |
+            | **TOTAL** | **[Suma]** | **[Suma]** | **100%** |
             
-            ESTRUCTURA:
+            ESTRUCTURA DEL INFORME:
             1. Resumen Ejecutivo.
-            2. Cronología.
-            3. Tabla de Titularidad Actual.
+            2. Cronología Detallada.
+            3. Tabla de Titularidad Actual (OBLIGATORIA).
             4. Incidencias.
             """
-            
-            # Temperatura a 0.0 para máxima precisión
-            generation_config = {"temperature": 0.0}
+
+            # Volvemos a temperatura baja pero no 0 absoluto para que no se bloquee
+            generation_config = {"temperature": 0.1}
 
             model = genai.GenerativeModel(
                 model_name="gemini-2.5-flash",
@@ -220,7 +219,7 @@ if analyze_btn and uploaded_files:
             )
             response = model.generate_content(["Genera el informe.", *gemini_files])
             
-            # --- AQUÍ ESTÁ EL CAMBIO CLAVE (LIMPIEZA SEGURA) ---
+            # FILTRO DE LIMPIEZA V5.5
             final_text = clean_technical_output(response.text)
             
             progress.empty()
