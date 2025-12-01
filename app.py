@@ -18,25 +18,53 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS Personalizado para que se vea moderno
+# --- 1. CONFIGURACIÓN VISUAL Y CSS ---
+st.set_page_config(
+    page_title="LegalAudit AI",
+    page_icon="⚖️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
 st.markdown("""
     <style>
-    .main {background-color: #f9f9f9;}
+    /* 1. FONDO DE LA BARRA LATERAL (OSCURO) */
+    section[data-testid="stSidebar"] {
+        background-color: #101820; /* Azul Noche muy elegante */
+    }
+    
+    /* 2. TEXTO DE LA BARRA LATERAL (BLANCO) */
+    /* Para que se lea bien sobre el fondo oscuro */
+    section[data-testid="stSidebar"] h1, 
+    section[data-testid="stSidebar"] h2,
+    section[data-testid="stSidebar"] label, 
+    section[data-testid="stSidebar"] .stMarkdown,
+    section[data-testid="stSidebar"] p {
+        color: #ffffff !important;
+    }
+
+    /* 3. FONDO PRINCIPAL (CLARO) */
+    .main {background-color: #f4f6f9;}
+    
+    /* 4. TÍTULOS PRINCIPALES */
     h1 {color: #2c3e50; font-family: 'Helvetica', sans-serif;}
-    h2 {color: #34495e;}
+    
+    /* 5. BOTONES PERSONALIZADOS */
     .stButton>button {
         width: 100%; 
         border-radius: 8px; 
         height: 3em; 
-        background-color: #2c3e50; 
+        background-color: #c5a059; /* Un tono dorado similar a tu logo */
         color: white; 
         font-weight: bold;
+        border: none;
     }
     .stButton>button:hover {
-        background-color: #34495e;
-        border-color: #34495e;
+        background-color: #b08d4b; /* Dorado un poco más oscuro al pasar el ratón */
         color: white;
     }
+    
+    /* 6. CAJA DE ÉXITO */
     .success-box {
         padding: 1rem;
         background-color: #d4edda;
@@ -278,4 +306,5 @@ if analyze_btn and uploaded_files:
             )
         else:
             st.info("👈 Ejecuta el análisis en la pestaña anterior para generar el documento.")
+
 
