@@ -28,9 +28,9 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    /* 1. FONDO DE LA BARRA LATERAL (OSCURO) */
+    /* 1. FONDO DE LA BARRA LATERAL (OSCURO - AZUL NOCHE) */
     section[data-testid="stSidebar"] {
-        background-color: #101820; /* Azul Noche */
+        background-color: #101820;
     }
     
     /* 2. TEXTO GENÉRICO DE LA BARRA LATERAL (BLANCO) */
@@ -72,16 +72,26 @@ st.markdown("""
         margin-bottom: 1rem;
     }
 
-    /* 7. ARREGLO VISIBILIDAD ARCHIVOS ADJUNTOS (NUEVO) */
-    /* Fuerza que el nombre del archivo, el tamaño y los iconos sean blancos */
-    [data-testid="stSidebar"] [data-testid="stFileUploader"] div,
-    [data-testid="stSidebar"] [data-testid="stFileUploader"] span,
-    [data-testid="stSidebar"] [data-testid="stFileUploader"] small {
+    /* 7. ARREGLO VISIBILIDAD ARCHIVOS (CORREGIDO) */
+    
+    /* A. SOLO cambiamos a BLANCO los archivos que YA has subido (la lista) */
+    /* Usamos 'stFileUploaderFile' para no afectar a la caja de arriba */
+    [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] div,
+    [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] small,
+    [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] span {
         color: #ffffff !important;
     }
-    /* Pinta la X (borrar) y el clip de blanco puro */
-    [data-testid="stSidebar"] [data-testid="stFileUploader"] svg {
+    
+    /* B. Pinta la X (borrar) y el clip de blanco puro */
+    [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] svg {
         fill: #ffffff !important;
+    }
+    
+    /* C. Aseguramos que el botón de "Browse files" sea legible */
+    [data-testid="stSidebar"] button[kind="secondary"] {
+        background-color: #ffffff !important;
+        color: #000000 !important;
+        border: none;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -319,6 +329,7 @@ if analyze_btn and uploaded_files:
             )
         else:
             st.info("👈 Ejecuta el análisis en la pestaña anterior para generar el documento.")
+
 
 
 
