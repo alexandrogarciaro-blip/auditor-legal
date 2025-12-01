@@ -100,7 +100,7 @@ def add_markdown_to_doc(doc, text):
 def create_professional_report(content_text):
     doc = Document()
     for _ in range(5): doc.add_paragraph()
-    title = doc.add_heading('INFORME DE AUDITORÍA SOCIETARIA', 0)
+    title = doc.add_heading('INFORME DE LAS ESCRITURAS', 0)
     title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
     doc.add_paragraph(f'Fecha: {datetime.now().strftime("%d/%m/%Y")}').alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
     doc.add_page_break()
@@ -183,3 +183,4 @@ if analyze_btn and uploaded_files:
             bio = io.BytesIO()
             doc.save(bio)
             st.download_button("📥 Descargar Word", data=bio.getvalue(), file_name="Auditoria.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
