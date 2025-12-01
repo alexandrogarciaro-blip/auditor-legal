@@ -171,7 +171,7 @@ with st.sidebar:
     st.info("💡 **Consejo:** Sube todos los documentos de una misma empresa juntos.")
 
 # --- 5. INTERFAZ PRINCIPAL ---
-st.title("⚖️ Auditoría Legal Inteligente")
+st.title("⚖️ Auditor de Escrituras Inteligente")
 
 if not uploaded_files:
     st.markdown("""
@@ -255,6 +255,7 @@ if analyze_btn and uploaded_files:
             bio = io.BytesIO()
             doc.save(bio)
             st.download_button("📥 Descargar Word", data=bio.getvalue(), file_name="Auditoria.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
 
 
 
