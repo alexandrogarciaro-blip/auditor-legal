@@ -18,112 +18,76 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- 1. CONFIGURACIÓN VISUAL Y CSS ---
-st.set_page_config(
-    page_title="LegalAudit AI",
-    page_icon="⚖️",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
+# Estilos CSS (Incluye el Modo Oscuro para la barra lateral)
 st.markdown("""
     <style>
-    /* 1. FONDO DE LA BARRA LATERAL (OSCURO - AZUL NOCHE) */
-    section[data-testid="stSidebar"] {
-        background-color: #101820;
-    }
+    /* BARRA LATERAL OSCURA */
+    section[data-testid="stSidebar"] {background-color: #101820;}
+    section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2,
+    section[data-testid="stSidebar"] label, section[data-testid="stSidebar"] .stMarkdown,
+    section[data-testid="stSidebar"] p {color: #ffffff !important;}
     
-    /* 2. TEXTO GENÉRICO DE LA BARRA LATERAL (BLANCO) */
-    section[data-testid="stSidebar"] h1, 
-    section[data-testid="stSidebar"] h2,
-    section[data-testid="stSidebar"] label, 
-    section[data-testid="stSidebar"] .stMarkdown,
-    section[data-testid="stSidebar"] p {
-        color: #ffffff !important;
-    }
-
-    /* 3. FONDO PRINCIPAL (CLARO) */
+    /* FONDO PRINCIPAL */
     .main {background-color: #f4f6f9;}
-    
-    /* 4. TÍTULOS PRINCIPALES */
     h1 {color: #2c3e50; font-family: 'Helvetica', sans-serif;}
     
-    /* 5. BOTONES PERSONALIZADOS (DORADO) */
+    /* BOTONES DORADOS */
     .stButton>button {
-        width: 100%; 
-        border-radius: 8px; 
-        height: 3em; 
-        background-color: #c5a059; 
-        color: white; 
-        font-weight: bold;
-        border: none;
+        width: 100%; border-radius: 8px; height: 3em; 
+        background-color: #c5a059; color: white; font-weight: bold; border: none;
     }
-    .stButton>button:hover {
-        background-color: #b08d4b; 
-        color: white;
-    }
+    .stButton>button:hover {background-color: #b08d4b; color: white;}
     
-    /* 6. CAJA DE ÉXITO */
-    .success-box {
-        padding: 1rem;
-        background-color: #d4edda;
-        border-left: 6px solid #28a745;
-        color: #155724;
-        margin-bottom: 1rem;
-    }
-
-    /* 7. ARREGLO VISIBILIDAD ARCHIVOS (CORREGIDO) */
-    
-    /* A. SOLO cambiamos a BLANCO los archivos que YA has subido (la lista) */
-    /* Usamos 'stFileUploaderFile' para no afectar a la caja de arriba */
+    /* VISIBILIDAD DE ARCHIVOS EN BARRA LATERAL */
     [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] div,
     [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] small,
-    [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] span {
-        color: #ffffff !important;
-    }
+    [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] span {color: #ffffff !important;}
+    [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] svg {fill: #ffffff !important;}
+    [data-testid="stSidebar"] button[kind="secondary"] {background-color: #ffffff !important; color: #000000 !important; border: none;}
     
-    /* B. Pinta la X (borrar) y el clip de blanco puro */
-    [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] svg {
-        fill: #ffffff !important;
-    }
-    
-    /* C. Aseguramos que el botón de "Browse files" sea legible */
-    [data-testid="stSidebar"] button[kind="secondary"] {
-        background-color: #ffffff !important;
-        color: #000000 !important;
-        border: none;
-    }
+    /* CAJA DE ÉXITO */
+    .success-box {padding: 1rem; background-color: #d4edda; border-left: 6px solid #28a745; color: #155724; margin-bottom: 1rem;}
     </style>
     """, unsafe_allow_html=True)
-
-
 
 # --- 2. CONEXIÓN SEGURA ---
 try:
     api_key = st.secrets["GOOGLE_API_KEY"]
     genai.configure(api_key=api_key)
 except:
-    st.error("⚠️ Error Crítico: No se detecta la API Key en los Secrets.")
+    st.error("⚠️ Error: No se detecta la API Key en los Secrets.")
     st.stop()
 
-# --- 3. MOTOR DE WORD PROFESIONAL ---
+# --- 3. FUNCIONES DE LIMPIEZA Y WORD ---
+
+def clean_technical_output(text):
+    """
+    Elimina los bloques de código Python que la IA a veces muestra.
+    Busca patrones entre ``` y ``` y los borra.
+    """
+    # Eliminar bloques de código ```python ... ``` o ``` ... ```
+    clean_text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
+    # Eliminar líneas sueltas que parezcan código técnico
+    return clean_text.strip()
+
 def add_markdown_to_doc(doc, text):
-    """Convierte Markdown a elementos nativos de Word"""
+    """Convierte Markdown limpio a Word"""
     lines = text.split('\n')
     table_buffer = []
     in_table = False
 
     for line in lines:
         stripped = line.strip()
+        if not stripped: continue # Saltar líneas vacías extra
 
-        # Detección de Tablas
+        # Detectar Tablas
         if stripped.startswith('|') and stripped.endswith('|'):
             if '---' in stripped: continue
             row_data = [c.strip() for c in stripped.split('|') if c.strip()]
             table_buffer.append(row_data)
             in_table = True
         else:
-            # Dibujar tabla si se acabó
+            # Dibujar tabla pendiente
             if in_table and table_buffer:
                 if len(table_buffer) > 0:
                     rows = len(table_buffer)
@@ -131,206 +95,137 @@ def add_markdown_to_doc(doc, text):
                     t = doc.add_table(rows=rows, cols=cols)
                     t.style = 'Table Grid'
                     t.autofit = True
-                    
                     for r, row_data in enumerate(table_buffer):
                         for c, cell_text in enumerate(row_data):
                             if c < cols:
                                 cell = t.cell(r, c)
-                                # Poner negrita en la cabecera
                                 p = cell.paragraphs[0]
-                                run = p.add_run(cell_text)
-                                if r == 0: run.bold = True
-                
+                                p.text = cell_text
+                                if r == 0: 
+                                    for run in p.runs: run.bold = True
                 table_buffer = []
                 in_table = False
 
-            # Títulos
+            # Formato de texto
             if stripped.startswith('## '):
                 doc.add_heading(stripped.replace('#', '').strip(), level=1)
             elif stripped.startswith('### '):
                 doc.add_heading(stripped.replace('#', '').strip(), level=2)
-            # Listas
             elif stripped.startswith('- '):
                 doc.add_paragraph(stripped[2:], style='List Bullet')
-            # Párrafos normales
             elif stripped:
                 p = doc.add_paragraph()
-                # Procesar negritas simples **texto**
+                # Negritas
                 parts = re.split(r'(\*\*.*?\*\*)', stripped)
                 for part in parts:
                     if part.startswith('**') and part.endswith('**'):
                         p.add_run(part[2:-2]).bold = True
                     else:
                         p.add_run(part)
-
     return doc
 
 def create_professional_report(content_text):
-    """Crea un Word con portada y formato"""
     doc = Document()
-    
-    # --- PORTADA ---
-    for _ in range(5): doc.add_paragraph() # Espacio
+    # Portada
+    for _ in range(5): doc.add_paragraph()
     title = doc.add_heading('INFORME DE AUDITORÍA SOCIETARIA', 0)
     title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-    
     subtitle = doc.add_paragraph('Análisis de Titularidad Real y Trayectoria')
     subtitle.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+    doc.add_paragraph(f'Fecha: {datetime.now().strftime("%d/%m/%Y")}').alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+    doc.add_page_break()
     
-    date_p = doc.add_paragraph(f'Fecha de emisión: {datetime.now().strftime("%d/%m/%Y")}')
-    date_p.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-    
-    doc.add_page_break() # Salto de página
-    
-    # --- CONTENIDO ---
+    # Contenido Limpio
     add_markdown_to_doc(doc, content_text)
     
-    # --- PIE DE PÁGINA ---
+    # Pie
     section = doc.sections[0]
-    footer = section.footer
-    p = footer.paragraphs[0]
-    p.text = "Informe generado automáticamente por LegalAudit AI"
+    p = section.footer.paragraphs[0]
+    p.text = "Documento generado por IA - Palomares Consultores"
     p.alignment = WD_PARAGRAPH_ALIGNMENT.RIGHT
-    
     return doc
 
-# --- 4. INTERFAZ: BARRA LATERAL ---
+# --- 4. INTERFAZ ---
 with st.sidebar:
-   # st.image("https://cdn-icons-png.flaticon.com/512/1998/1998342.png", width=80)
-    st.image("logo.png", width=200)
-    st.title("Panel de Control")
-    st.markdown("---")
-    
-    uploaded_files = st.file_uploader(
-        "1. Sube las Escrituras (PDF)", 
-        type=['pdf'], 
-        accept_multiple_files=True,
-        help="Sube constitución, ampliaciones, compraventas, etc."
-    )
-    
+    # LOGO (Si subiste 'logo.png' a GitHub se verá, si no usa un icono)
+    try:
+        st.image("logo.png", width=280)
+    except:
+        st.image("https://cdn-icons-png.flaticon.com/512/1998/1998342.png", width=100)
+        
+    st.markdown("### Panel de Control")
+    uploaded_files = st.file_uploader("1. Sube Escrituras (PDF)", type=['pdf'], accept_multiple_files=True)
     st.markdown("---")
     analyze_btn = st.button("2. EJECUTAR ANÁLISIS ✨", type="primary")
-    
-    st.info("💡 **Consejo:** Sube todos los documentos de una misma empresa juntos para que la IA pueda trazar la historia completa.")
 
-# --- 5. INTERFAZ: ÁREA CENTRAL ---
+# --- 5. LÓGICA ---
 st.title("⚖️ Auditoría Legal Inteligente")
-st.markdown("##### Generador de informes de titularidad real y Cap Tables")
 
 if not uploaded_files:
-    st.markdown("""
-    <div style="padding: 20px; background-color: #e8f4f8; border-radius: 10px;">
-        <h4>👋 Bienvenido</h4>
-        <p>Esta herramienta utiliza <b>Gemini 2.5 Flash</b> para leer escrituras notariales complejas.</p>
-        <p><b>Cómo funciona:</b></p>
-        <ol>
-            <li>Sube los PDFs en el menú de la izquierda.</li>
-            <li>La IA ordenará cronológicamente los hechos.</li>
-            <li>Se calculará matemáticamente el reparto de capital.</li>
-            <li>Podrás descargar un Word profesional.</li>
-        </ol>
-    </div>
-    """, unsafe_allow_html=True)
+    st.info("👋 Sube los documentos en el menú de la izquierda para comenzar.")
 
-# --- 6. LÓGICA DE ANÁLISIS ---
 if analyze_btn and uploaded_files:
-    
-    # Pestañas para organizar la salida
-    tab1, tab2 = st.tabs(["📄 Informe Visual", "📥 Descarga Word"])
+    tab1, tab2 = st.tabs(["📄 Informe", "📥 Word"])
     
     with tab1:
-        progress_bar = st.progress(0, text="Iniciando motor de IA...")
-        
+        progress = st.progress(0, text="Iniciando...")
         try:
-            # A. Subida a Google
             gemini_files = []
-            for i, uploaded_file in enumerate(uploaded_files):
-                progress_bar.progress((i / len(uploaded_files)) * 0.5, text=f"Leyendo: {uploaded_file.name}...")
-                
+            # A. Subida
+            for i, f in enumerate(uploaded_files):
+                progress.progress((i/len(uploaded_files))*0.5, text=f"Leyendo: {f.name}")
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                    tmp.write(uploaded_file.getvalue())
+                    tmp.write(f.getvalue())
                     tmp_path = tmp.name
-                
-                g_file = genai.upload_file(path=tmp_path, display_name=uploaded_file.name)
+                g_file = genai.upload_file(path=tmp_path, display_name=f.name)
                 gemini_files.append(g_file)
                 os.remove(tmp_path)
 
-            # B. Espera activa
-            progress_bar.progress(0.6, text="Procesando documentos en la nube...")
-            time.sleep(2) # Pequeña pausa para asegurar sincronización
+            progress.progress(0.6, text="Procesando...")
+            time.sleep(2)
             
-            # C. El Prompt Maestro (MEJORADO)
+            # B. PROMPT (Con instrucción de ocultar código)
             SYSTEM_PROMPT = """
-            ROL: Abogado Mercantilista Senior y Auditor.
-            OBJETIVO: Analizar la documentación societaria y generar un informe de Due Diligence.
-
-            METODOLOGÍA OBLIGATORIA:
-            1. **CODE EXECUTION:** Usa Python para calcular el Cap Table. Prohibido calcular de memoria.
-            2. **CRONOLOGÍA:** Ordena los hechos por la fecha de la escritura, NO por el nombre del archivo.
-            3. **MONEDA:** Convierte todo a EUROS para la tabla final, pero cita las PESETAS originales en la narrativa.
-
-            ESTRUCTURA DEL INFORME (Usa Markdown):
+            ROL: Abogado Mercantilista.
+            OBJETIVO: Informe de Due Diligence.
             
-            ## 1. Resumen Ejecutivo
-            Breve párrafo (3 líneas) con el estado actual de la empresa: Capital actual, Órgano de administración vigente y sede social.
-
-            ## 2. Cronología de Actos Jurídicos
-            (Narra historia paso a paso. Sé preciso con las fechas y Notarios).
-            - **[FECHA] - Constitución/Ampliación/Venta:** Detalle de la operación.
-
-            ## 3. Cuadro de Titularidad Real (Cap Table)
-            (Genera una tabla Markdown exacta calculada vía Python):
-            | Socio | DNI/NIF | Nº Participaciones | % Capital | Valor Nominal Total (€) |
-
-            ## 4. Observaciones / Incidencias
-            Indica si hay saltos en la numeración de participaciones o datos ilegibles.
+            REGLAS ESTRICTAS DE SALIDA:
+            1. **NO MUESTRES CÓDIGO:** Usa Python internamente para calcular, pero EN EL INFORME FINAL SOLO QUIERO EL TEXTO Y LAS TABLAS. Oculta los bloques de código, variables y pasos intermedios.
+            2. **TABLAS:** Genera tablas Markdown limpias.
+            3. **ESTILO:** Narrativo profesional.
+            
+            ESTRUCTURA:
+            1. Resumen Ejecutivo.
+            2. Cronología Detallada.
+            3. Tabla de Titularidad Actual (Calculada exactamente).
+            4. Incidencias.
             """
 
-            # D. Ejecución del Modelo
-            progress_bar.progress(0.8, text="Redactando informe legal...")
-            
+            # C. Generación
             model = genai.GenerativeModel(
                 model_name="gemini-2.5-flash",
                 system_instruction=SYSTEM_PROMPT,
                 tools='code_execution'
             )
+            response = model.generate_content(["Genera el informe.", *gemini_files])
             
-            response = model.generate_content(["Genera el informe de auditoría completo.", *gemini_files])
+            # D. LIMPIEZA DE CÓDIGO (El filtro mágico)
+            final_text = clean_technical_output(response.text)
             
-            progress_bar.progress(1.0, text="¡Finalizado!")
-            time.sleep(0.5)
-            progress_bar.empty()
-
-            # E. Mostrar Resultados
-            st.markdown('<div class="success-box">✅ Análisis completado con éxito. Revisa los datos abajo.</div>', unsafe_allow_html=True)
-            st.markdown(response.text)
+            progress.empty()
+            st.markdown('<div class="success-box">✅ Análisis completado.</div>', unsafe_allow_html=True)
+            st.markdown(final_text)
             
-            # Guardamos el texto en la sesión para que no se borre al cambiar de pestaña
-            st.session_state['report_text'] = response.text
+            st.session_state['report_text'] = final_text
 
         except Exception as e:
-            st.error(f"Ocurrió un error: {e}")
+            st.error(f"Error: {e}")
 
     with tab2:
         if 'report_text' in st.session_state:
-            st.markdown("### Descargar Entregable")
-            st.write("El informe está listo. Haz clic abajo para obtener el documento Word formateado con portada.")
-            
-            # Generar Word
+            st.write("Descarga el documento final formateado.")
             doc = create_professional_report(st.session_state['report_text'])
             bio = io.BytesIO()
             doc.save(bio)
-            
-            st.download_button(
-                label="📥 Descargar Informe Profesional (.docx)",
-                data=bio.getvalue(),
-                file_name=f"Auditoria_Legal_{datetime.now().strftime('%Y%m%d')}.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
-        else:
-            st.info("👈 Ejecuta el análisis en la pestaña anterior para generar el documento.")
-
-
-
-
+            st.download_button("📥 Descargar Word", data=bio.getvalue(), file_name="Auditoria.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
