@@ -14,19 +14,28 @@ st.set_page_config(page_title="LegalAudit AI", page_icon="⚖️", layout="wide"
 
 st.markdown("""
     <style>
+    /* BARRA LATERAL OSCURA */
     section[data-testid="stSidebar"] {background-color: #101820;}
     section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2,
     section[data-testid="stSidebar"] label, section[data-testid="stSidebar"] .stMarkdown,
     section[data-testid="stSidebar"] p {color: #ffffff !important;}
+    
+    /* FONDO PRINCIPAL */
     .main {background-color: #f4f6f9;}
     h1 {color: #2c3e50; font-family: 'Helvetica', sans-serif;}
+    
+    /* BOTONES DORADOS */
     .stButton>button {width: 100%; border-radius: 8px; height: 3em; background-color: #c5a059; color: white; font-weight: bold; border: none;}
     .stButton>button:hover {background-color: #b08d4b; color: white;}
+    
+    /* VISIBILIDAD DE ARCHIVOS EN BARRA LATERAL */
     [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] div,
     [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] small,
     [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] span {color: #ffffff !important;}
     [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] svg {fill: #ffffff !important;}
     [data-testid="stSidebar"] button[kind="secondary"] {background-color: #ffffff !important; color: #000000 !important; border: none;}
+    
+    /* CAJA DE ÉXITO */
     .success-box {padding: 1rem; background-color: #d4edda; border-left: 6px solid #28a745; color: #155724; margin-bottom: 1rem;}
     </style>
     """, unsafe_allow_html=True)
@@ -41,9 +50,7 @@ except:
 
 # --- 3. FUNCIONES ---
 def clean_technical_output(text):
-    # Borra cualquier bloque de código
     text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
-    # Borra posibles títulos residuales si la IA es rebelde
     text = text.replace("# INFORME DE DUE DILIGENCE", "# INFORME DE SITUACIÓN")
     return text.strip()
 
@@ -99,27 +106,48 @@ def create_professional_report(content_text):
     doc = Document()
     for _ in range(5): doc.add_paragraph()
     
-    # --- AQUÍ CAMBIAMOS EL TÍTULO DE LA PORTADA DEL WORD ---
+    # Título Portada Word
     title = doc.add_heading('INFORME DE SITUACIÓN SOCIETARIA', 0)
-    
     title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
     doc.add_paragraph(f'Fecha: {datetime.now().strftime("%d/%m/%Y")}').alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
     doc.add_page_break()
     add_markdown_to_doc(doc, content_text)
     return doc
 
-# --- 4. INTERFAZ ---
+# --- 4. INTERFAZ (BARRA LATERAL) ---
 with st.sidebar:
     try:
         st.image("logo.png", width=280)
     except:
         st.image("https://cdn-icons-png.flaticon.com/512/1998/1998342.png", width=100)
+    
     st.markdown("### Panel de Control")
     uploaded_files = st.file_uploader("1. Sube Escrituras (PDF)", type=['pdf'], accept_multiple_files=True)
     st.markdown("---")
     analyze_btn = st.button("2. EJECUTAR ANÁLISIS ✨", type="primary")
+    
+    # [RECUPERADO] El consejo informativo del final
+    st.markdown("---")
+    st.info("💡 **Consejo:** Sube todos los documentos de una misma empresa juntos para que la IA pueda trazar la historia completa.")
 
+# --- 5. INTERFAZ (PRINCIPAL) ---
 st.title("⚖️ Auditoría Legal Inteligente")
+
+# [RECUPERADO] El cuadro de bienvenida grande
+if not uploaded_files:
+    st.markdown("""
+    <div style="padding: 20px; background-color: #e8f4f8; border-radius: 10px; border: 1px solid #d1e7dd;">
+        <h4 style="color: #0c5460;">👋 Bienvenido al Sistema de Auditoría</h4>
+        <p style="color: #0c5460;">Esta herramienta utiliza inteligencia artificial avanzada para analizar escrituras notariales.</p>
+        <p><b>Instrucciones de uso:</b></p>
+        <ol style="color: #0c5460;">
+            <li>Sube los PDFs en el menú de la izquierda (Constitución, Ampliaciones, etc.).</li>
+            <li>Haz clic en <b>EJECUTAR ANÁLISIS</b>.</li>
+            <li>La IA ordenará los hechos y calculará el reparto de capital.</li>
+            <li>Podrás descargar el resultado en Word.</li>
+        </ol>
+    </div>
+    """, unsafe_allow_html=True)
 
 if analyze_btn and uploaded_files:
     tab1, tab2 = st.tabs(["📄 Informe", "📥 Word"])
@@ -139,19 +167,19 @@ if analyze_btn and uploaded_files:
             progress.progress(0.6, text="Analizando...")
             time.sleep(1)
             
-            # --- PROMPT CON INSTRUCCIÓN DE TÍTULO OBLIGATORIO ---
+            # PROMPT MAESTRO
             SYSTEM_PROMPT = """
             ROL: Abogado Mercantilista y Auditor.
             OBJETIVO: Redactar un Informe de Situación.
             
-            INSTRUCCIONES DE CABECERA (IMPORTANTE):
+            INSTRUCCIONES DE CABECERA:
             1. NO pongas "Due Diligence".
-            2. Empieza el informe con el título exacto: "# INFORME DE SITUACIÓN ACTUAL".
+            2. Empieza el informe con: "# INFORME DE SITUACIÓN ACTUAL".
             
             INSTRUCCIONES TÉCNICAS:
             1. Usa 'code_execution' para calcular el Cap Table exacto.
-            2. IMPORTANTE: Una vez calculada la tabla con Python, PÍNTALA DE NUEVO como una tabla Markdown normal en el texto final.
-            3. No muestres código Python, solo texto y tablas legibles.
+            2. IMPORTANTE: Tras calcular con Python, PINTA LA TABLA DE NUEVO en el texto final (Markdown).
+            3. No muestres código Python ni variables, solo el texto narrativo y las tablas.
             
             ESTRUCTURA:
             1. Resumen Ejecutivo.
@@ -167,7 +195,7 @@ if analyze_btn and uploaded_files:
             )
             response = model.generate_content(["Genera el informe.", *gemini_files])
             
-            # Limpieza y Sustitución de seguridad (si se le escapa el título viejo, lo cambiamos por software)
+            # Limpieza
             final_text = clean_technical_output(response.text)
             
             progress.empty()
@@ -185,4 +213,3 @@ if analyze_btn and uploaded_files:
             bio = io.BytesIO()
             doc.save(bio)
             st.download_button("📥 Descargar Word", data=bio.getvalue(), file_name="Auditoria.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-
