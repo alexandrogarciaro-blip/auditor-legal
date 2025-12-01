@@ -30,7 +30,7 @@ st.markdown("""
     <style>
     /* 1. FONDO DE LA BARRA LATERAL (OSCURO) */
     section[data-testid="stSidebar"] {
-        background-color: #101820; /* Azul Noche muy elegante */
+        background-color: #1B4079; /* Azul Noche */
     }
     
     /* 2. TEXTO DE LA BARRA LATERAL (BLANCO) */
@@ -306,5 +306,6 @@ if analyze_btn and uploaded_files:
             )
         else:
             st.info("👈 Ejecuta el análisis en la pestaña anterior para generar el documento.")
+
 
 
