@@ -30,11 +30,10 @@ st.markdown("""
     <style>
     /* 1. FONDO DE LA BARRA LATERAL (OSCURO) */
     section[data-testid="stSidebar"] {
-        background-color: #1B4079; /* Azul Noche */
+        background-color: #101820; /* Azul Noche */
     }
     
-    /* 2. TEXTO DE LA BARRA LATERAL (BLANCO) */
-    /* Para que se lea bien sobre el fondo oscuro */
+    /* 2. TEXTO GENÉRICO DE LA BARRA LATERAL (BLANCO) */
     section[data-testid="stSidebar"] h1, 
     section[data-testid="stSidebar"] h2,
     section[data-testid="stSidebar"] label, 
@@ -49,18 +48,18 @@ st.markdown("""
     /* 4. TÍTULOS PRINCIPALES */
     h1 {color: #2c3e50; font-family: 'Helvetica', sans-serif;}
     
-    /* 5. BOTONES PERSONALIZADOS */
+    /* 5. BOTONES PERSONALIZADOS (DORADO) */
     .stButton>button {
         width: 100%; 
         border-radius: 8px; 
         height: 3em; 
-        background-color: #c5a059; /* Un tono dorado similar a tu logo */
+        background-color: #c5a059; 
         color: white; 
         font-weight: bold;
         border: none;
     }
     .stButton>button:hover {
-        background-color: #b08d4b; /* Dorado un poco más oscuro al pasar el ratón */
+        background-color: #b08d4b; 
         color: white;
     }
     
@@ -72,8 +71,22 @@ st.markdown("""
         color: #155724;
         margin-bottom: 1rem;
     }
+
+    /* 7. ARREGLO VISIBILIDAD ARCHIVOS ADJUNTOS (NUEVO) */
+    /* Fuerza que el nombre del archivo, el tamaño y los iconos sean blancos */
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] div,
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] span,
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] small {
+        color: #ffffff !important;
+    }
+    /* Pinta la X (borrar) y el clip de blanco puro */
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] svg {
+        fill: #ffffff !important;
+    }
     </style>
     """, unsafe_allow_html=True)
+
+
 
 # --- 2. CONEXIÓN SEGURA ---
 try:
@@ -306,6 +319,7 @@ if analyze_btn and uploaded_files:
             )
         else:
             st.info("👈 Ejecuta el análisis en la pestaña anterior para generar el documento.")
+
 
 
 
