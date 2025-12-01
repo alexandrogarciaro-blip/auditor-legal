@@ -1,146 +1,279 @@
 import streamlit as st
 import google.generativeai as genai
 from docx import Document
+from docx.shared import Pt, RGBColor, Inches
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 import io
 import time
 import tempfile
 import os
+import re
+from datetime import datetime
 
-# --- CONFIGURACIÓN DE LA PÁGINA ---
-st.set_page_config(page_title="Auditor Legal IA", page_icon="⚖️", layout="wide")
+# --- 1. CONFIGURACIÓN VISUAL ---
+st.set_page_config(
+    page_title="LegalAudit AI",
+    page_icon="⚖️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# --- ESTILOS CSS ---
+# CSS Personalizado para que se vea moderno
 st.markdown("""
     <style>
-    .stButton>button {width: 100%; border-radius: 5px; height: 3em; background-color: #FF4B4B; color: white;}
+    .main {background-color: #f9f9f9;}
+    h1 {color: #2c3e50; font-family: 'Helvetica', sans-serif;}
+    h2 {color: #34495e;}
+    .stButton>button {
+        width: 100%; 
+        border-radius: 8px; 
+        height: 3em; 
+        background-color: #2c3e50; 
+        color: white; 
+        font-weight: bold;
+    }
+    .stButton>button:hover {
+        background-color: #34495e;
+        border-color: #34495e;
+        color: white;
+    }
+    .success-box {
+        padding: 1rem;
+        background-color: #d4edda;
+        border-left: 6px solid #28a745;
+        color: #155724;
+        margin-bottom: 1rem;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- CONEXIÓN SEGURA (SECRETS) ---
+# --- 2. CONEXIÓN SEGURA ---
 try:
     api_key = st.secrets["GOOGLE_API_KEY"]
     genai.configure(api_key=api_key)
 except:
-    st.error("⚠️ Error: No se encuentra la API Key en los Secrets de Streamlit.")
+    st.error("⚠️ Error Crítico: No se detecta la API Key en los Secrets.")
     st.stop()
 
-# --- TÍTULO ---
-st.title("⚖️ Auditoría de Escrituras (PALOMARES CONSULTORES)")
-st.markdown("---")
-st.info("ℹ️ Sube todas las escrituras (PDF). La IA ordenará los hechos y calculará el reparto de socios.")
+# --- 3. MOTOR DE WORD PROFESIONAL ---
+def add_markdown_to_doc(doc, text):
+    """Convierte Markdown a elementos nativos de Word"""
+    lines = text.split('\n')
+    table_buffer = []
+    in_table = False
 
-# --- FUNCIONES AUXILIARES ---
-def wait_for_files_active(files):
-    """Espera a que Google procese los archivos"""
-    my_bar = st.progress(0, text="Procesando documentos en la nube...")
-    for i, file in enumerate(files):
-        file_check = genai.get_file(file.name)
-        while file_check.state.name == "PROCESSING":
-            time.sleep(1)
-            file_check = genai.get_file(file.name)
-        if file_check.state.name != "ACTIVE":
-            st.error(f"Error procesando {file.display_name}")
-            return False
-        my_bar.progress((i + 1) / len(files), text=f"Listo: {file.display_name}")
-    my_bar.empty()
-    return True
+    for line in lines:
+        stripped = line.strip()
 
-def clean_markdown(text):
-    """Limpia el texto para el Word"""
-    return text.replace('**', '').replace('##', '').replace('###', '')
+        # Detección de Tablas
+        if stripped.startswith('|') and stripped.endswith('|'):
+            if '---' in stripped: continue
+            row_data = [c.strip() for c in stripped.split('|') if c.strip()]
+            table_buffer.append(row_data)
+            in_table = True
+        else:
+            # Dibujar tabla si se acabó
+            if in_table and table_buffer:
+                if len(table_buffer) > 0:
+                    rows = len(table_buffer)
+                    cols = len(table_buffer[0])
+                    t = doc.add_table(rows=rows, cols=cols)
+                    t.style = 'Table Grid'
+                    t.autofit = True
+                    
+                    for r, row_data in enumerate(table_buffer):
+                        for c, cell_text in enumerate(row_data):
+                            if c < cols:
+                                cell = t.cell(r, c)
+                                # Poner negrita en la cabecera
+                                p = cell.paragraphs[0]
+                                run = p.add_run(cell_text)
+                                if r == 0: run.bold = True
+                
+                table_buffer = []
+                in_table = False
 
-# --- INTERFAZ DE CARGA ---
-uploaded_files = st.file_uploader("📂 Arrastra los PDFs aquí", type=['pdf'], accept_multiple_files=True)
+            # Títulos
+            if stripped.startswith('## '):
+                doc.add_heading(stripped.replace('#', '').strip(), level=1)
+            elif stripped.startswith('### '):
+                doc.add_heading(stripped.replace('#', '').strip(), level=2)
+            # Listas
+            elif stripped.startswith('- '):
+                doc.add_paragraph(stripped[2:], style='List Bullet')
+            # Párrafos normales
+            elif stripped:
+                p = doc.add_paragraph()
+                # Procesar negritas simples **texto**
+                parts = re.split(r'(\*\*.*?\*\*)', stripped)
+                for part in parts:
+                    if part.startswith('**') and part.endswith('**'):
+                        p.add_run(part[2:-2]).bold = True
+                    else:
+                        p.add_run(part)
 
-# --- CEREBRO JURÍDICO (PROMPT) ---
-SYSTEM_PROMPT = """
-ROL: Eres un Auditor Mercantil Senior y Jurista Experto.
-OBJETIVO: Analizar escrituras de una sociedad para generar un informe de TITULARIDAD REAL y TRAYECTORIA.
+    return doc
 
-REGLAS OBLIGATORIAS:
-1. USO DE PYTHON: Tienes PROHIBIDO hacer cálculos mentales. Usa siempre 'code_execution' para sumar/restar participaciones y calcular porcentajes.
-2. ORDEN: Cronológico estricto basado en la fecha de otorgamiento dentro del texto.
-3. ESTILO: Narrativo formal (no esquemático). Redacta la historia de la empresa.
-4. MONEDA: Si hay Pesetas, indica su valor y la conversión a Euros entre paréntesis.
+def create_professional_report(content_text):
+    """Crea un Word con portada y formato"""
+    doc = Document()
+    
+    # --- PORTADA ---
+    for _ in range(5): doc.add_paragraph() # Espacio
+    title = doc.add_heading('INFORME DE AUDITORÍA SOCIETARIA', 0)
+    title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+    
+    subtitle = doc.add_paragraph('Análisis de Titularidad Real y Trayectoria')
+    subtitle.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+    
+    date_p = doc.add_paragraph(f'Fecha de emisión: {datetime.now().strftime("%d/%m/%Y")}')
+    date_p.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+    
+    doc.add_page_break() # Salto de página
+    
+    # --- CONTENIDO ---
+    add_markdown_to_doc(doc, content_text)
+    
+    # --- PIE DE PÁGINA ---
+    section = doc.sections[0]
+    footer = section.footer
+    p = footer.paragraphs[0]
+    p.text = "Informe generado automáticamente por LegalAudit AI"
+    p.alignment = WD_PARAGRAPH_ALIGNMENT.RIGHT
+    
+    return doc
 
-ESTRUCTURA DEL INFORME:
-- Título: Informe de Auditoría Societaria.
-- Capítulo 1: Constitución (Datos fundacionales).
-- Capítulo 2: Evolución Histórica (Narra cada escritura: Ampliaciones, Ceses, Cambios domicilio...).
-- Capítulo 3 (VITAL): TABLA DE TITULARIDAD ACTUAL.
-  Debes generar una tabla final con: | SOCIO | Nº PARTICIPACIONES | VALOR NOMINAL (€) | % CAPITAL SOCIAL |
+# --- 4. INTERFAZ: BARRA LATERAL ---
+with st.sidebar:
+    st.image("https://cdn-icons-png.flaticon.com/512/1998/1998342.png", width=80)
+    st.title("Panel de Control")
+    st.markdown("---")
+    
+    uploaded_files = st.file_uploader(
+        "1. Sube las Escrituras (PDF)", 
+        type=['pdf'], 
+        accept_multiple_files=True,
+        help="Sube constitución, ampliaciones, compraventas, etc."
+    )
+    
+    st.markdown("---")
+    analyze_btn = st.button("2. EJECUTAR ANÁLISIS ✨", type="primary")
+    
+    st.info("💡 **Consejo:** Sube todos los documentos de una misma empresa juntos para que la IA pueda trazar la historia completa.")
 
-Si detectas errores en la cadena de titularidad (ej. alguien vende lo que no tiene), avisa en una sección de "INCIDENCIAS".
-"""
+# --- 5. INTERFAZ: ÁREA CENTRAL ---
+st.title("⚖️ Auditoría Legal Inteligente")
+st.markdown("##### Generador de informes de titularidad real y Cap Tables")
 
-# --- BOTÓN DE EJECUCIÓN ---
-if st.button("🔍 INICIAR AUDITORÍA", type="primary"):
-    if not uploaded_files:
-        st.warning("⚠️ Por favor, sube al menos un documento.")
-    else:
+if not uploaded_files:
+    st.markdown("""
+    <div style="padding: 20px; background-color: #e8f4f8; border-radius: 10px;">
+        <h4>👋 Bienvenido</h4>
+        <p>Esta herramienta utiliza <b>Gemini 2.5 Flash</b> para leer escrituras notariales complejas.</p>
+        <p><b>Cómo funciona:</b></p>
+        <ol>
+            <li>Sube los PDFs en el menú de la izquierda.</li>
+            <li>La IA ordenará cronológicamente los hechos.</li>
+            <li>Se calculará matemáticamente el reparto de capital.</li>
+            <li>Podrás descargar un Word profesional.</li>
+        </ol>
+    </div>
+    """, unsafe_allow_html=True)
+
+# --- 6. LÓGICA DE ANÁLISIS ---
+if analyze_btn and uploaded_files:
+    
+    # Pestañas para organizar la salida
+    tab1, tab2 = st.tabs(["📄 Informe Visual", "📥 Descarga Word"])
+    
+    with tab1:
+        progress_bar = st.progress(0, text="Iniciando motor de IA...")
+        
         try:
-            # 1. Subida a Google
+            # A. Subida a Google
             gemini_files = []
-            with st.spinner('Subiendo archivos a la IA...'):
-                for uploaded_file in uploaded_files:
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                        tmp.write(uploaded_file.getvalue())
-                        tmp_path = tmp.name
-                    
-                    g_file = genai.upload_file(path=tmp_path, display_name=uploaded_file.name)
-                    gemini_files.append(g_file)
-                    os.remove(tmp_path) # Borrar temporal local
+            for i, uploaded_file in enumerate(uploaded_files):
+                progress_bar.progress((i / len(uploaded_files)) * 0.5, text=f"Leyendo: {uploaded_file.name}...")
+                
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                    tmp.write(uploaded_file.getvalue())
+                    tmp_path = tmp.name
+                
+                g_file = genai.upload_file(path=tmp_path, display_name=uploaded_file.name)
+                gemini_files.append(g_file)
+                os.remove(tmp_path)
 
-            # 2. Procesamiento
-            if wait_for_files_active(gemini_files):
-                with st.spinner('🧠 Gemini 3 está leyendo, razonando y calculando... (Esto puede tardar unos segundos)'):
-                    
-                    # CONFIGURACIÓN DEL MODELO GEMINI 3
-                    model = genai.GenerativeModel(
-                        model_name="gemini-2.5-flash", ######################################################################################## VERSION DE GEMINI
-                        system_instruction=SYSTEM_PROMPT,
-                        tools='code_execution'
-                    )
-                    
-                    # Llamada a la IA
-                    response = model.generate_content(
-                        ["Analiza los documentos adjuntos y genera el informe completo.", *gemini_files]
-                    )
+            # B. Espera activa
+            progress_bar.progress(0.6, text="Procesando documentos en la nube...")
+            time.sleep(2) # Pequeña pausa para asegurar sincronización
+            
+            # C. El Prompt Maestro (MEJORADO)
+            SYSTEM_PROMPT = """
+            ROL: Abogado Mercantilista Senior y Auditor.
+            OBJETIVO: Analizar la documentación societaria y generar un informe de Due Diligence.
 
-                # 3. Mostrar Resultados
-                st.success("¡Análisis Completado!")
-                
-                col1, col2 = st.columns([0.6, 0.4])
-                
-                with col1:
-                    st.markdown("### 📄 Vista Previa")
-                    st.markdown(response.text)
-                
-                with col2:
-                    st.markdown("### 📥 Descarga")
-                    # Generar Word
-                    doc = Document()
-                    doc.add_heading('Informe de Auditoría Legal', 0)
-                    
-                    # Añadir texto limpio
-                    clean_text = clean_markdown(response.text)
-                    for line in clean_text.split('\n'):
-                        if line.strip():
-                            doc.add_paragraph(line)
-                            
-                    bio = io.BytesIO()
-                    doc.save(bio)
-                    
-                    st.download_button(
-                        label="Descargar Informe (.docx)",
-                        data=bio.getvalue(),
-                        file_name="Auditoria_Legal.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    )
+            METODOLOGÍA OBLIGATORIA:
+            1. **CODE EXECUTION:** Usa Python para calcular el Cap Table. Prohibido calcular de memoria.
+            2. **CRONOLOGÍA:** Ordena los hechos por la fecha de la escritura, NO por el nombre del archivo.
+            3. **MONEDA:** Convierte todo a EUROS para la tabla final, pero cita las PESETAS originales en la narrativa.
+
+            ESTRUCTURA DEL INFORME (Usa Markdown):
+            
+            ## 1. Resumen Ejecutivo
+            Breve párrafo (3 líneas) con el estado actual de la empresa: Capital actual, Órgano de administración vigente y sede social.
+
+            ## 2. Cronología de Actos Jurídicos
+            (Narra historia paso a paso. Sé preciso con las fechas y Notarios).
+            - **[FECHA] - Constitución/Ampliación/Venta:** Detalle de la operación.
+
+            ## 3. Cuadro de Titularidad Real (Cap Table)
+            (Genera una tabla Markdown exacta calculada vía Python):
+            | Socio | DNI/NIF | Nº Participaciones | % Capital | Valor Nominal Total (€) |
+
+            ## 4. Observaciones / Incidencias
+            Indica si hay saltos en la numeración de participaciones o datos ilegibles.
+            """
+
+            # D. Ejecución del Modelo
+            progress_bar.progress(0.8, text="Redactando informe legal...")
+            
+            model = genai.GenerativeModel(
+                model_name="gemini-2.5-flash",
+                system_instruction=SYSTEM_PROMPT,
+                tools='code_execution'
+            )
+            
+            response = model.generate_content(["Genera el informe de auditoría completo.", *gemini_files])
+            
+            progress_bar.progress(1.0, text="¡Finalizado!")
+            time.sleep(0.5)
+            progress_bar.empty()
+
+            # E. Mostrar Resultados
+            st.markdown('<div class="success-box">✅ Análisis completado con éxito. Revisa los datos abajo.</div>', unsafe_allow_html=True)
+            st.markdown(response.text)
+            
+            # Guardamos el texto en la sesión para que no se borre al cambiar de pestaña
+            st.session_state['report_text'] = response.text
 
         except Exception as e:
             st.error(f"Ocurrió un error: {e}")
 
-
-
-
+    with tab2:
+        if 'report_text' in st.session_state:
+            st.markdown("### Descargar Entregable")
+            st.write("El informe está listo. Haz clic abajo para obtener el documento Word formateado con portada.")
+            
+            # Generar Word
+            doc = create_professional_report(st.session_state['report_text'])
+            bio = io.BytesIO()
+            doc.save(bio)
+            
+            st.download_button(
+                label="📥 Descargar Informe Profesional (.docx)",
+                data=bio.getvalue(),
+                file_name=f"Auditoria_Legal_{datetime.now().strftime('%Y%m%d')}.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+        else:
+            st.info("👈 Ejecuta el análisis en la pestaña anterior para generar el documento.")
