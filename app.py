@@ -14,19 +14,28 @@ st.set_page_config(page_title="LegalAudit AI", page_icon="⚖️", layout="wide"
 
 st.markdown("""
     <style>
+    /* BARRA LATERAL OSCURA */
     section[data-testid="stSidebar"] {background-color: #101820;}
     section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2,
     section[data-testid="stSidebar"] label, section[data-testid="stSidebar"] .stMarkdown,
     section[data-testid="stSidebar"] p {color: #ffffff !important;}
+    
+    /* FONDO PRINCIPAL */
     .main {background-color: #f4f6f9;}
     h1 {color: #2c3e50; font-family: 'Helvetica', sans-serif;}
+    
+    /* BOTONES DORADOS */
     .stButton>button {width: 100%; border-radius: 8px; height: 3em; background-color: #c5a059; color: white; font-weight: bold; border: none;}
     .stButton>button:hover {background-color: #b08d4b; color: white;}
+    
+    /* VISIBILIDAD DE ARCHIVOS EN BARRA LATERAL */
     [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] div,
     [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] small,
     [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] span {color: #ffffff !important;}
     [data-testid="stSidebar"] [data-testid="stFileUploaderFile"] svg {fill: #ffffff !important;}
     [data-testid="stSidebar"] button[kind="secondary"] {background-color: #ffffff !important; color: #000000 !important; border: none;}
+    
+    /* CAJA DE ÉXITO */
     .success-box {padding: 1rem; background-color: #d4edda; border-left: 6px solid #28a745; color: #155724; margin-bottom: 1rem;}
     </style>
     """, unsafe_allow_html=True)
@@ -39,35 +48,44 @@ except:
     st.error("⚠️ Error: No API Key found.")
     st.stop()
 
-# --- 3. FUNCIONES DE LIMPIEZA INTELIGENTE ---
+# --- 3. FUNCIONES DE LIMPIEZA INTELIGENTE (RESCATE DE TABLAS) ---
 
 def clean_technical_output(text):
     """
-    Filtro avanzado: Elimina bloques de código y líneas sueltas de programación Python.
+    Estrategia de limpieza V5.6:
+    1. Quita los envoltorios de código (```).
+    2. Filtra línea a línea borrando lo que parece Python.
+    3. PROTEGE explícitamente las líneas que parecen tablas Markdown (|...|).
     """
-    # 1. Borrar bloques completos entre ``` y ```
-    text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
+    # 1. Quitar envoltorios pero dejar el contenido
+    text = text.replace("```markdown", "").replace("```python", "").replace("```", "")
     
-    # 2. Borrar títulos viejos
+    # 2. Corregir título si hace falta
     text = text.replace("# INFORME DE DUE DILIGENCE", "# INFORME DE SITUACIÓN")
     
-    # 3. FILTRO LÍNEA A LÍNEA (El "Escoba")
-    # Si una línea parece código Python, la eliminamos.
     lines = text.split('\n')
     clean_lines = []
     
     for line in lines:
         l = line.strip()
         
-        # Patrones de código que NO queremos ver
-        is_code = False
-        if l.startswith("print(") or l.startswith("def "): is_code = True
-        if "socios_data =" in l or "total_participaciones =" in l: is_code = True
-        if l.startswith("python") and len(l) < 10: is_code = True # La palabra "python" suelta
-        if l.startswith("table_rows"): is_code = True
-        if "append(f" in l: is_code = True
+        # --- REGLA DE PROTECCIÓN DE TABLAS ---
+        # Si la línea empieza y acaba por '|', es una tabla. LA GUARDAMOS SIEMPRE.
+        if l.startswith("|") and l.endswith("|"):
+            clean_lines.append(line)
+            continue
         
-        if not is_code:
+        # --- FILTRO DE BASURA TÉCNICA ---
+        is_garbage = False
+        
+        # Detectar sintaxis Python común
+        if l.startswith("print(") or l.startswith("def ") or l.startswith("import "): is_garbage = True
+        if " = {" in l or " = [" in l: is_garbage = True # Asignación de variables
+        if "append(" in l or "return " in l: is_garbage = True
+        if l == "python": is_garbage = True
+        
+        # Si no es basura, lo guardamos (es texto narrativo)
+        if not is_garbage:
             clean_lines.append(line)
             
     return '\n'.join(clean_lines).strip()
@@ -99,8 +117,10 @@ def add_markdown_to_doc(doc, text):
                                 cell = t.cell(r, c)
                                 p = cell.paragraphs[0]
                                 p.text = cell_text
+                                
                                 is_header = (r == 0)
                                 is_total = (c == 0 and "TOTAL" in cell_text.upper())
+                                
                                 if is_header or is_total: 
                                     for run in p.runs: run.bold = True
                                 if "TOTAL" in row_data[0].upper():
@@ -183,19 +203,16 @@ if analyze_btn and uploaded_files:
             progress.progress(0.6, text="Analizando...")
             time.sleep(1)
             
-            # --- PROMPT V5.5 (ANTIRUIDO) ---
+            # --- PROMPT V5.6 (MÁS NARRATIVO PERO ESTRICTO CON LA TABLA) ---
             SYSTEM_PROMPT = """
             ROL: Abogado Mercantilista y Auditor.
             OBJETIVO: Redactar un Informe de Situación Societaria.
             
-            INSTRUCCIONES DE SALIDA (MUY IMPORTANTE):
-            1. NO EXPLIQUES LOS CÁLCULOS.
-            2. NO MUESTRES VARIABLES DE PYTHON.
-            3. DAME DIRECTAMENTE EL TEXTO FINAL Y LA TABLA.
+            INSTRUCCIONES TÉCNICAS:
+            1. Usa 'code_execution' para calcular el Cap Table.
+            2. LA TABLA ES OBLIGATORIA. Si la calculas en Python, imprímela también en formato Markdown (|...|) para que se vea en el informe.
             
-            REGLA DE ORO PARA TABLAS (INMUTABLE):
-            Debes generar la tabla con EXACTAMENTE estas columnas y UNA FILA FINAL DE TOTALES:
-            
+            FORMATO DE TABLA OBLIGATORIO:
             | Socios | Participaciones | Capital Nominal | Porcentaje % |
             |---|---|---|---|
             | [Datos...] | [Datos...] | [Datos...] | [Datos...] |
@@ -208,7 +225,7 @@ if analyze_btn and uploaded_files:
             4. Incidencias.
             """
 
-            # Volvemos a temperatura baja pero no 0 absoluto para que no se bloquee
+            # Temperatura baja para consistencia
             generation_config = {"temperature": 0.1}
 
             model = genai.GenerativeModel(
@@ -219,7 +236,7 @@ if analyze_btn and uploaded_files:
             )
             response = model.generate_content(["Genera el informe.", *gemini_files])
             
-            # FILTRO DE LIMPIEZA V5.5
+            # APLICAMOS LA NUEVA LIMPIEZA INTELIGENTE
             final_text = clean_technical_output(response.text)
             
             progress.empty()
@@ -237,5 +254,3 @@ if analyze_btn and uploaded_files:
             bio = io.BytesIO()
             doc.save(bio)
             st.download_button("📥 Descargar Word", data=bio.getvalue(), file_name="Auditoria.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-
-
