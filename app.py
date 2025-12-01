@@ -49,9 +49,23 @@ except:
     st.stop()
 
 # --- 3. FUNCIONES ---
+
 def clean_technical_output(text):
-    text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
+    """
+    CORRECCIÓN CRÍTICA:
+    Solo borra bloques de código Python.
+    Si la tabla está dentro de un bloque markdown, la PRESERVA.
+    """
+    # 1. Borrar bloques estrictamente de Python (cálculos)
+    text = re.sub(r'```python.*?```', '', text, flags=re.DOTALL)
+    
+    # 2. Borrar títulos viejos si aparecen
     text = text.replace("# INFORME DE DUE DILIGENCE", "# INFORME DE SITUACIÓN")
+    
+    # 3. Limpieza suave: Si quedan comillas triples ``` o ```markdown, las quitamos
+    # pero NO borramos lo que hay dentro (porque ahí está la tabla).
+    text = text.replace('```markdown', '').replace('```', '')
+    
     return text.strip()
 
 def add_markdown_to_doc(doc, text):
@@ -62,6 +76,7 @@ def add_markdown_to_doc(doc, text):
         stripped = line.strip()
         if not stripped: continue
         
+        # Detector de tablas mejorado
         if stripped.startswith('|') and stripped.endswith('|'):
             if '---' in stripped: continue
             row_data = [c.strip() for c in stripped.split('|') if c.strip()]
@@ -121,7 +136,7 @@ def create_professional_report(content_text):
     add_markdown_to_doc(doc, content_text)
     return doc
 
-# --- 4. INTERFAZ ---
+# --- 4. INTERFAZ (BARRA LATERAL) ---
 with st.sidebar:
     try:
         st.image("logo.png", width=280)
@@ -171,48 +186,41 @@ if analyze_btn and uploaded_files:
             progress.progress(0.6, text="Analizando...")
             time.sleep(1)
             
-            # --- PROMPT V5.3 (MODO ESTRICTO) ---
+            # --- PROMPT V5.4 (CON CONTROL DE TABLAS) ---
             SYSTEM_PROMPT = """
             ROL: Abogado Mercantilista y Auditor.
             OBJETIVO: Redactar un Informe de Situación Societaria.
             
-            INSTRUCCIONES DE FORMATO OBLIGATORIAS:
-            1. Título inicial: "# INFORME DE SITUACIÓN ACTUAL".
-            2. NO muestres código Python. Dame solo texto limpio.
+            INSTRUCCIONES DE FORMATO:
+            1. Título: "# INFORME DE SITUACIÓN ACTUAL".
+            2. Usa 'code_execution' para los cálculos, pero NO muestres el código.
+            3. **IMPORTANTE:** La tabla final DEBE aparecer en el texto.
             
-            !!! PRIORIDAD MÁXIMA - TABLA DE SOCIOS !!!
-            Es IMPRESCINDIBLE que incluyas la tabla final. Si no la pones, el informe es inválido.
-            Debes calcularla con Python y luego DIBUJARLA EXPLÍCITAMENTE EN EL TEXTO FINAL usando este formato:
-            
+            PLANTILLA DE TABLA OBLIGATORIA:
             | Socios | Participaciones | Capital Nominal | Porcentaje % |
             |---|---|---|---|
-            | [Datos...] | [Datos...] | [Datos...] | [Datos...] |
-            | **TOTAL** | **[Suma]** | **[Suma]** | **100%** |
+            | ... | ... | ... | ... |
+            | **TOTAL** | **...** | **...** | **100%** |
             
-            Asegúrate de que la fila de TOTALES esté presente al final de la tabla.
-            
-            ESTRUCTURA DEL INFORME:
+            ESTRUCTURA:
             1. Resumen Ejecutivo.
-            2. Cronología Detallada.
-            3. Tabla de Titularidad Actual (OBLIGATORIA).
+            2. Cronología.
+            3. Tabla de Titularidad Actual.
             4. Incidencias.
             """
-
-            # CONFIGURACIÓN DETERMINISTA (TEMPERATURA 0)
-            # Esto evita que la IA improvise o se salte pasos.
-            generation_config = {
-                "temperature": 0.0,
-                "max_output_tokens": 8192,
-            }
+            
+            # Temperatura a 0.0 para máxima precisión
+            generation_config = {"temperature": 0.0}
 
             model = genai.GenerativeModel(
                 model_name="gemini-2.5-flash",
                 system_instruction=SYSTEM_PROMPT,
-                generation_config=generation_config, # Aplicamos la configuración aquí
+                generation_config=generation_config,
                 tools='code_execution'
             )
             response = model.generate_content(["Genera el informe.", *gemini_files])
             
+            # --- AQUÍ ESTÁ EL CAMBIO CLAVE (LIMPIEZA SEGURA) ---
             final_text = clean_technical_output(response.text)
             
             progress.empty()
@@ -230,3 +238,5 @@ if analyze_btn and uploaded_files:
             bio = io.BytesIO()
             doc.save(bio)
             st.download_button("📥 Descargar Word", data=bio.getvalue(), file_name="Auditoria.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
+
