@@ -145,7 +145,8 @@ def create_professional_report(content_text):
 
 # --- 4. INTERFAZ: BARRA LATERAL ---
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/1998/1998342.png", width=80)
+   # st.image("https://cdn-icons-png.flaticon.com/512/1998/1998342.png", width=80)
+    st.image("logo.png", width=200)
     st.title("Panel de Control")
     st.markdown("---")
     
@@ -277,3 +278,4 @@ if analyze_btn and uploaded_files:
             )
         else:
             st.info("👈 Ejecuta el análisis en la pestaña anterior para generar el documento.")
+
