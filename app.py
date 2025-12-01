@@ -82,14 +82,12 @@ def add_markdown_to_doc(doc, text):
                                 p = cell.paragraphs[0]
                                 p.text = cell_text
                                 
-                                # NEGRITA PARA ENCABEZADO (Fila 0) Y TOTALES
+                                # NEGRITA PARA ENCABEZADO Y TOTALES
                                 is_header = (r == 0)
                                 is_total = (c == 0 and "TOTAL" in cell_text.upper())
                                 
                                 if is_header or is_total: 
                                     for run in p.runs: run.bold = True
-                                    
-                                # Si es la fila de TOTAL, ponemos negrita a todas las celdas de esa fila
                                 if "TOTAL" in row_data[0].upper():
                                      for run in p.runs: run.bold = True
 
@@ -123,7 +121,7 @@ def create_professional_report(content_text):
     add_markdown_to_doc(doc, content_text)
     return doc
 
-# --- 4. INTERFAZ (BARRA LATERAL) ---
+# --- 4. INTERFAZ ---
 with st.sidebar:
     try:
         st.image("logo.png", width=280)
@@ -135,10 +133,10 @@ with st.sidebar:
     st.markdown("---")
     analyze_btn = st.button("2. EJECUTAR ANÁLISIS ✨", type="primary")
     st.markdown("---")
-    st.info("💡 **Consejo:** Sube todos los documentos de una misma empresa juntos para que la IA pueda trazar la historia completa.")
+    st.info("💡 **Consejo:** Sube todos los documentos de una misma empresa juntos.")
 
-# --- 5. INTERFAZ (PRINCIPAL) ---
-st.title("⚖️ Auditor de Escrituras Inteligente")
+# --- 5. INTERFAZ PRINCIPAL ---
+st.title("⚖️ Auditoría Legal Inteligente")
 
 if not uploaded_files:
     st.markdown("""
@@ -173,7 +171,7 @@ if analyze_btn and uploaded_files:
             progress.progress(0.6, text="Analizando...")
             time.sleep(1)
             
-            # --- PROMPT V5.2 (CON TOTALES OBLIGATORIOS) ---
+            # --- PROMPT V5.3 (MODO ESTRICTO) ---
             SYSTEM_PROMPT = """
             ROL: Abogado Mercantilista y Auditor.
             OBJETIVO: Redactar un Informe de Situación Societaria.
@@ -182,28 +180,35 @@ if analyze_btn and uploaded_files:
             1. Título inicial: "# INFORME DE SITUACIÓN ACTUAL".
             2. NO muestres código Python. Dame solo texto limpio.
             
-            REGLA DE ORO PARA TABLAS (INMUTABLE):
-            Debes generar la tabla con EXACTAMENTE estas columnas y UNA FILA FINAL DE TOTALES:
+            !!! PRIORIDAD MÁXIMA - TABLA DE SOCIOS !!!
+            Es IMPRESCINDIBLE que incluyas la tabla final. Si no la pones, el informe es inválido.
+            Debes calcularla con Python y luego DIBUJARLA EXPLÍCITAMENTE EN EL TEXTO FINAL usando este formato:
             
             | Socios | Participaciones | Capital Nominal | Porcentaje % |
             |---|---|---|---|
             | [Datos...] | [Datos...] | [Datos...] | [Datos...] |
-            | **TOTAL** | **[Suma Total]** | **[Suma Total]** | **100%** |
+            | **TOTAL** | **[Suma]** | **[Suma]** | **100%** |
             
-            Notas sobre la tabla:
-            - La última fila debe llamarse "TOTAL" y debe sumar todas las columnas numéricas.
-            - Indica la moneda (ej: 3.000 €).
+            Asegúrate de que la fila de TOTALES esté presente al final de la tabla.
             
             ESTRUCTURA DEL INFORME:
             1. Resumen Ejecutivo.
             2. Cronología Detallada.
-            3. Tabla de Titularidad Actual (Con Totales).
+            3. Tabla de Titularidad Actual (OBLIGATORIA).
             4. Incidencias.
             """
+
+            # CONFIGURACIÓN DETERMINISTA (TEMPERATURA 0)
+            # Esto evita que la IA improvise o se salte pasos.
+            generation_config = {
+                "temperature": 0.0,
+                "max_output_tokens": 8192,
+            }
 
             model = genai.GenerativeModel(
                 model_name="gemini-2.5-flash",
                 system_instruction=SYSTEM_PROMPT,
+                generation_config=generation_config, # Aplicamos la configuración aquí
                 tools='code_execution'
             )
             response = model.generate_content(["Genera el informe.", *gemini_files])
@@ -225,4 +230,3 @@ if analyze_btn and uploaded_files:
             bio = io.BytesIO()
             doc.save(bio)
             st.download_button("📥 Descargar Word", data=bio.getvalue(), file_name="Auditoria.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-
