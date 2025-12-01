@@ -39,15 +39,14 @@ except:
     st.error("⚠️ Error: No API Key found.")
     st.stop()
 
-# --- 3. FUNCIONES ---
+# --- 3. FUNCIONES DE LIMPIEZA ---
 def clean_technical_output(text):
     """
-    Limpia los bloques de código pero INTENTA PRESERVAR las tablas si la IA las metió dentro.
+    Elimina CUALQUIER bloque de código (entre tres comillas simples), 
+    sea python, json o texto plano.
     """
-    # 1. Eliminamos bloques que sean explícitamente de Python
-    text = re.sub(r'```python.*?```', '', text, flags=re.DOTALL)
-    # 2. Eliminamos bloques genéricos de código, PERO SOLO si no parecen tablas Markdown
-    # (Esto es un extra de seguridad, pero confiaremos más en el Prompt)
+    # Esta expresión regular busca cualquier cosa entre ``` y ``` y la elimina
+    text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
     return text.strip()
 
 def add_markdown_to_doc(doc, text):
@@ -139,23 +138,24 @@ if analyze_btn and uploaded_files:
             progress.progress(0.6, text="Analizando...")
             time.sleep(1)
             
-            # --- PROMPT CORREGIDO PARA QUE PINTE LA TABLA ---
+            # --- PROMPT REFORZADO ---
             SYSTEM_PROMPT = """
-            ROL: Abogado Mercantilista y Auditor.
+            ROL: Abogado Mercantilista.
             OBJETIVO: Informe de Due Diligence.
             
-            INSTRUCCIÓN CRÍTICA SOBRE EL RESULTADO:
-            1. Usa 'code_execution' para calcular el Cap Table exacto.
-            2. **IMPORTANTE:** Una vez calculada la tabla con Python, **DEBES VOLVER A DIBUJARLA EN EL TEXTO FINAL** usando formato Markdown estándar (| Socio | % |).
-            3. NO confíes en que yo vea el output de Python. Si no la escribes de nuevo en el texto, no la veré.
+            INSTRUCCIÓN TÉCNICA (OBLIGATORIA):
+            1. Usa el entorno de ejecución (Code Execution) para hacer los cálculos matemáticos.
+            2. **IMPORTANTE:** El usuario NO puede ver el código. Tu respuesta final debe ser TEXTO PLANO y TABLAS MARKDOWN ESTÁNDAR.
+            3. **PROHIBIDO:** No pongas la tabla final dentro de un bloque de código. Escríbela fuera.
             
-            ESTRUCTURA DEL INFORME:
-            1. Resumen Ejecutivo.
-            2. Cronología Detallada.
-            3. **Tabla de Titularidad Actual** (Asegúrate de pintarla aquí explícitamente).
-            4. Incidencias.
+            FORMATO ESPERADO:
+            [Texto de la historia...]
             
-            RECUERDA: Oculta los bloques de código Python, dame solo el texto limpio y las tablas Markdown.
+            | Socio | % |
+            |---|---|
+            | A | 50% |
+            
+            [Más texto...]
             """
 
             model = genai.GenerativeModel(
@@ -165,7 +165,7 @@ if analyze_btn and uploaded_files:
             )
             response = model.generate_content(["Genera el informe.", *gemini_files])
             
-            # Limpieza (solo borra bloques explícitos de python)
+            # LIMPIEZA AGRESIVA (Ahora borra cualquier bloque ``` ... ```)
             final_text = clean_technical_output(response.text)
             
             progress.empty()
